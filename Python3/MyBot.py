@@ -12,6 +12,7 @@ to log anything use the logging module.
 """
 # Let's start by importing the Halite Starter Kit so we can interface with the Halite engine
 import hlt
+import time
 
 from random import sample, randint
 
@@ -28,9 +29,10 @@ def closest_enemy(gamemap, myship):
             closest = foreign_entity
     return closest
 
+
 # GAME START
 # Here we define the bot's name as Settler and initialize the game, including communication with the Halite engine.
-game = hlt.Game("Settler 0.6")
+game = hlt.Game("Settler 0.9")
 
 #persist between turns
 planet_target = {}
@@ -39,6 +41,7 @@ while True:
     # TURN START
     # Update the map for the new turn and get the latest version
     
+    turn_start_us = time.time()
     game_map = game.update_map()
 
     # Here we define the set of commands to be sent to the Halite engine at the end of the turn
@@ -46,14 +49,18 @@ while True:
 
     #only 1 ship can dock per turn?
     unowned_planets = [p for p in game_map.all_planets() if not p.is_owned()]
+    unowned_planets.sort(key=lambda x: x.id) 
     planet_docking = []
 
     ship_speed = hlt.constants.MAX_SPEED*0.8
     ship_action_limit = 70
     ship_actions = 0
 
-    # For every ship that I control
+    enemy_ships = [s for s in game_map._all_ships() if s.owner != game_map.get_me()]
+    docked_enemy_ships = [s for s in enemy_ships if s.docking_status == s.DockingStatus.DOCKED]
+    # every ship that I control
     all_ships = game_map.get_me().all_ships()
+
     if len(all_ships) > 50:
         ignore_ships = True
     else:
@@ -61,6 +68,8 @@ while True:
 
     # sample/shuffle ships to avoid deadlocks
     for ship in sample(all_ships, len(all_ships)):
+        if (time.time() - turn_start_us) > 1.8:
+            break
         # If the ship is undocked
         if ship.docking_status != ship.DockingStatus.UNDOCKED:
             # Skip this ship
@@ -97,11 +106,16 @@ while True:
                         break
         else:
             # no unowned planets, go looking for trouble
-            target_ship = closest_enemy(game_map, ship)
+            if len(docked_enemy_ships) > 1:
+                target_ship = docked_enemy_ships[ship.id % len(docked_enemy_ships)]
+            elif len(enemy_ships) > 1:
+                target_ship = enemy_ships[ship.id % len(enemy_ships)]
+            else:
+                target_ship = enemy_ships[0]
             if target_ship:
                 navigate_command = ship.navigate(ship.closest_point_to(target_ship),
                                                  game_map, speed=ship_speed,
-                                                 ignore_ships=ignore_ships)
+                                                 ignore_ships=True)
                 if navigate_command:
                     command_queue.append(navigate_command)
 
