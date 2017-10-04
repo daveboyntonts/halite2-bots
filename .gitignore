@@ -1,0 +1,4 @@
+*.log
+replay*.hlt
+*.pyc
+hlt/__pycache__
