@@ -73,7 +73,7 @@ def halite2_main():
     logger = logging.getLogger(__name__)
     # GAME START
     # Here we define the bot's name as Settler and initialize the game, including communication with the Halite engine.
-    game = hlt.Game("Colonizer 1.0")
+    game = hlt.Game("Settler 0.9")
     turn = 0
     
     #persist between turns key=ship_id, value=planet_id
