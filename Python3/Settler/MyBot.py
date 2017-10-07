@@ -1,14 +1,5 @@
 """
-Welcome to your first Halite-II bot!
-
-This bot's name is Settler. It's purpose is simple (don't expect it to win complex games :) ):
-1. Initialize game
-2. If a ship is not docked and there are unowned planets
-2.a. Try to Dock in the planet if close enough
-2.b If not, go towards the planet
-
-Note: Please do not place print statements here as they are used to communicate with the Halite engine. If you need
-to log anything use the logging module.
+Modified Settler Bot
 """
 # Let's start by importing the Halite Starter Kit so we can interface with the Halite engine
 import hlt
@@ -19,6 +10,7 @@ import pprint
 
 from random import sample, randint
 
+VERSION = "0.9.1"
 DEBUG = False
 
 def closest_enemy(gamemap, myship):
@@ -34,9 +26,9 @@ def closest_enemy(gamemap, myship):
             closest = foreign_entity
     return closest
 
-def find_closest_target(gamemap, ship):
+def find_nearby_target(gamemap, ship, range=40):
     logger = logging.getLogger(__name__)
-    nearby = gamemap.nearby_entities_by_distance(ship)
+    all_nearby = gamemap.nearby_entities_by_distance(ship)
     if DEBUG:
         logger.debug(pprint.pformat(nearby.keys()))
     return None
@@ -62,9 +54,10 @@ def planet_dock_if_nearby(gamemap, ship):
         if ship.can_dock(planet) and not planet.is_owned():
             return planet
         if planet.owner == ship.owner and not planet.is_full() and ship.can_dock(planet):
+            return planet
             # only let half of spawned ships dock
-            if (ship.id % 2) == 0:
-                return planet
+            #if (ship.id % 2) == 0:
+                #return planet
 
 def navigate(ship, destination, game_map, speed=hlt.constants.MAX_SPEED/2, ignore_ships=True):
     return ship.navigate(destination, game_map, speed, ignore_ships=ignore_ships)
@@ -73,7 +66,7 @@ def halite2_main():
     logger = logging.getLogger(__name__)
     # GAME START
     # Here we define the bot's name as Settler and initialize the game, including communication with the Halite engine.
-    game = hlt.Game("Settler 0.9")
+    game = hlt.Game("Settler %s" % VERSION)
     turn = 0
     
     #persist between turns key=ship_id, value=planet_id
@@ -85,9 +78,11 @@ def halite2_main():
         
         turn_start_us = time.time()
         turn += 1
-        logger.info("turn: {} start at: {}".format(turn, datetime.now().isoformat('T')))
 
+        logger.info("turn: {} start at: {}".format(turn, datetime.now().isoformat('T')))
         game_map = game.update_map()
+        logger.info("turn: {} game.update_map took: {}"
+                    .format(turn, time.time() - turn_start_us))
     
         # Here we define the set of commands to be sent to the Halite engine at the end of the turn
         command_queue = []
@@ -97,9 +92,27 @@ def halite2_main():
         unowned_planets.sort(key=lambda x: x.id) 
         planet_docking = []
     
-        ship_time_limit = 1.7
-        ship_speed = hlt.constants.MAX_SPEED*0.8
-        ship_action_limit = 80
+        if turn > 200:
+            ship_time_limit = 1.5
+            ship_speed = hlt.constants.MAX_SPEED*0.4
+            ship_action_limit = 50
+        elif turn > 100:
+            ship_time_limit = 1.6
+            ship_speed = hlt.constants.MAX_SPEED*0.5
+            ship_action_limit = 50
+        elif turn > 50:
+            ship_time_limit = 1.8
+            ship_speed = hlt.constants.MAX_SPEED*0.95
+            ship_action_limit = 100
+        elif turn > 10:
+            ship_time_limit = 1.9
+            ship_speed = hlt.constants.MAX_SPEED
+            ship_action_limit = 100
+        else:
+            ship_time_limit = 1.9
+            ship_speed = hlt.constants.MAX_SPEED
+            ship_action_limit = 100
+
         ship_actions = 0
     
         enemy_ships = [s for s in game_map._all_ships() if s.owner != game_map.get_me()]
@@ -121,7 +134,7 @@ def halite2_main():
             if (time.time() - turn_start_us) > ship_time_limit:
                 logger.info("turn: {} ship: {} skipping due to time {}"
                             .format(turn, ship.id, (time.time() - turn_start_us)))
-                continue
+                break
 
             # limit the number of ships we look at per turn, just in case
             ship_actions += 1
@@ -147,7 +160,7 @@ def halite2_main():
                 if (ship.id % 3) < 2:
                     # find ship's closest planet to navigate to
                     planet = find_closest_unowned_planet(game_map, ship, unowned_planets)
-                elif len(unowned_planets) > 0:
+                elif len(unowned_planets) > 1:
                     planet = unowned_planets[0]
                 if planet:
                     if DEBUG:

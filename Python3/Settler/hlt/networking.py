@@ -1,6 +1,7 @@
 import sys
 import logging
 import copy
+import time
 
 from . import game_map
 
@@ -92,5 +93,7 @@ class Game:
         """
         import logging
         logging.info("---NEW TURN---")
+        start_parse = time.time()
         self.map._parse(self._get_string())
+        logging.info("---NEW TURN--- parse took {:.03f}".format(time.time() - start_parse))
         return self.map
