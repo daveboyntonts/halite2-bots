@@ -11,7 +11,7 @@ import pprint
 from random import sample, randint
 from collections import defaultdict
 
-VERSION = "0.9.4"
+VERSION = "0.9.5"
 DEBUG = False
 
 
@@ -228,12 +228,30 @@ def halite2_main():
         #   action_collide_docked_percent
         #   action_target_docked_percent 
 
-        if turn > 200 and len(my_undocked_ships) > 100:
-            ship_time_limit = 1.8
+        if len(my_undocked_ships) > 200:
+            ship_time_limit = 1.5
+            ship_speed = hlt.constants.MAX_SPEED 
+            ship_action_limit = 5
+            ship_dock_ratio = 1
+            ship_dock_enemy_watch_range = 16
+            ship_shun_center_planets = False
+            action_ships = my_undocked_ships[:min(ship_action_limit, len(my_undocked_ships))]
+            #action_ship_long_range = int(max(1000, game_map.width, game_map.height))
+            action_ship_long_range = 50
+            action_planet_long_range = 1000
+            action_planet_target_limit = 10
+            action_target_docked_range = 1000
+            navigate_ignore_ships_threshold = 100
+            action_destroy_planet_percent = 100
+            action_planet_percent = 0
+            action_collide_docked_percent = 0
+            action_target_docked_percent = 0
+        elif turn > 200 and len(my_undocked_ships) > 100:
+            ship_time_limit = 1.5
             ship_speed = hlt.constants.MAX_SPEED * 0.4
-            ship_action_limit = 40
+            ship_action_limit = 30
             ship_dock_ratio = 4
-            ship_dock_enemy_range = 6
+            ship_dock_enemy_watch_range = 16
             ship_shun_center_planets = False
             action_ships = my_undocked_ships[:min(ship_action_limit, len(my_undocked_ships))]
             #action_ship_long_range = int(max(1000, game_map.width, game_map.height))
@@ -246,12 +264,12 @@ def halite2_main():
             action_planet_percent = 40
             action_collide_docked_percent = 60
             action_target_docked_percent = 70
-        elif turn > 100 and len(my_undocked_ships) > 100:
-            ship_time_limit = 1.8
+        elif turn > 100 or len(my_undocked_ships) > 100:
+            ship_time_limit = 1.7
             ship_speed = hlt.constants.MAX_SPEED * 0.5
-            ship_action_limit = 60
+            ship_action_limit = 50
             ship_dock_ratio = 3
-            ship_dock_enemy_range = 7
+            ship_dock_enemy_watch_range = 14
             ship_shun_center_planets = False
             action_ships = my_undocked_ships[:min(ship_action_limit, len(my_undocked_ships))]
             #action_ship_long_range = int(max(game_map.width, game_map.height) / 2)
@@ -268,8 +286,8 @@ def halite2_main():
             ship_time_limit = 1.8
             ship_speed = hlt.constants.MAX_SPEED * 0.95
             ship_action_limit = 100
-            ship_dock_ratio = 2
-            ship_dock_enemy_range = 10
+            ship_dock_ratio = 1
+            ship_dock_enemy_watch_range = 14
             ship_shun_center_planets = False
             action_ships = my_undocked_ships[:min(ship_action_limit, len(my_undocked_ships))]
             action_ship_long_range = 100
@@ -286,7 +304,7 @@ def halite2_main():
             ship_speed = hlt.constants.MAX_SPEED
             ship_action_limit = 100
             ship_dock_ratio = 1
-            ship_dock_enemy_range = 10
+            ship_dock_enemy_watch_range = 30
             ship_shun_center_planets = False
             action_ships = my_undocked_ships
             action_ship_long_range = 50
@@ -303,7 +321,7 @@ def halite2_main():
             ship_speed = hlt.constants.MAX_SPEED
             ship_action_limit = 100
             ship_dock_ratio = 1
-            ship_dock_enemy_range = 20
+            ship_dock_enemy_watch_range = 30
             ship_shun_center_planets = True
             action_ships = sample(my_undocked_ships, min(ship_action_limit, len(my_undocked_ships)))
             action_ship_long_range = 50
@@ -335,7 +353,9 @@ def halite2_main():
         # local variables
         #
         ship_actions = 0
+        ship_navigate = 0
         ship_nowork = 0
+        ship_dock = 0
         ship_dockwait = 0
 
         # limit number of ships docking to the same planet
@@ -369,22 +389,25 @@ def halite2_main():
                 navigate_command = ship.navigate(avoidance,
                                                  game_map, speed=hlt.constants.MAX_SPEED,
                                                  ignore_ships=False)
+                ship_navigate += 1
                 if navigate_command:
                     command_queue.append(navigate_command)
                 continue
 
             # Before docking check for nearby enemies
-            target_ship = closest_target_from_list(game_map, ship,
-                                                   enemy_ships, ship_dock_enemy_range)
-            if target_ship:
-                logger.info("turn: {} ship: {} defensive targetting ship: {}"
-                            .format(turn, ship.id, target_ship.id))
-                navigate_command = ship.navigate(ship.closest_point_to(target_ship, ship_navigate_distance),
-                                                 game_map, speed=ship_speed,
-                                                 ignore_ships=ignore_ships)
-                if navigate_command:
-                    command_queue.append(navigate_command)
-                continue
+            if ship_dock_enemy_watch_range > 0:
+                target_ship = closest_target_from_list(game_map, ship,
+                                                       enemy_ships, ship_dock_enemy_watch_range)
+                if target_ship:
+                    logger.info("turn: {} ship: {} defensive targetting ship: {}"
+                                .format(turn, ship.id, target_ship.id))
+                    navigate_command = ship.navigate(ship.closest_point_to(target_ship, ship_navigate_distance),
+                                                     game_map, speed=ship_speed,
+                                                     ignore_ships=ignore_ships)
+                    ship_navigate += 1
+                    if navigate_command:
+                        command_queue.append(navigate_command)
+                    continue
 
             # if we're next to a planet, maybe do that
             #if ship_dock_ratio > 0 and (hash(ship.id) % ship_dock_ratio) == 0:
@@ -398,6 +421,7 @@ def halite2_main():
                                     .format(turn, ship.id, docking_target.id))
                         planet_docking[docking_target.id] -= 1
                         command_queue.append(ship.dock(docking_target))
+                        ship_dock += 1
                     else:
                         ship_dockwait += 1
                         # this will not fall through and instead wait a turn and check again
@@ -416,6 +440,7 @@ def halite2_main():
                     navigate_command = ship.navigate(target_point, game_map,
                                                      speed=hlt.constants.MAX_SPEED,
                                                      ignore_ships=True)
+                    ship_navigate += 1
                     if navigate_command:
                         command_queue.append(navigate_command)
                         continue
@@ -425,12 +450,11 @@ def halite2_main():
                 # find ship's closest planet to navigate to
                 logger.debug("ship id {} hash {} is planet action (percent: {})"
                              .format(ship.id, hash(ship.id) % 100, action_planet_percent))
-                # TODO: reverse order
-                planet = find_closest_unowned_planet(game_map, ship, unowned_planets, 100)
+                planet = find_closest_owned_planet_with_docking(game_map, ship, owned_planets,
+                                                                action_planet_long_range,
+                                                                planet_targetting)
                 if not planet:
-                    planet = find_closest_owned_planet_with_docking(game_map, ship, owned_planets,
-                                                                    action_planet_long_range,
-                                                                    planet_targetting)
+                    planet = find_closest_unowned_planet(game_map, ship, unowned_planets, 100)
                 if planet:
                     logger.info("turn: {} ship: {} x,y {},{} off to planet: {} x,y {},{}"
                                 .format(turn, ship.id, ship.x, ship.y,
@@ -439,6 +463,7 @@ def halite2_main():
                     navigate_command = ship.navigate(target_point, game_map,
                                                      speed=ship_speed,
                                                      ignore_ships=ignore_ships)
+                    ship_navigate += 1
                     if ship_shun_center_planets and planet.id < 4:
                         logger.debug("planet: {} used when shunned".format(planet.id))
                     if navigate_command:
@@ -471,6 +496,7 @@ def halite2_main():
                     navigate_command = ship.navigate(ship.closest_point_to(target_ship, 0),
                                                      game_map, speed=ship_speed,
                                                      ignore_ships=True)
+                    ship_navigate += 1
                     if navigate_command:
                         command_queue.append(navigate_command)
                         continue
@@ -516,6 +542,7 @@ def halite2_main():
                 navigate_command = ship.navigate(ship.closest_point_to(target_ship, distance),
                                                  game_map, speed=ship_speed,
                                                  ignore_ships=ignore_ships)
+                ship_navigate += 1
                 if navigate_command:
                     command_queue.append(navigate_command)
             else:
@@ -526,13 +553,14 @@ def halite2_main():
 
         # Send our set of commands to the Halite engine for this turn
         turn_end_presend = time.time()
-        logger.info("turn: {} end ships time: {:.03f} actions {} dockwait {} nowork {}"
-                    .format(turn, turn_end_presend - turn_start_time, ship_actions, ship_dockwait, ship_nowork))
+        logger.info("turn: {} end ships time: {:.03f} actions {} navigate {} dock {} dockwait {} nowork {}"
+                    .format(turn, turn_end_presend - turn_start_time,
+                            ship_actions, ship_navigate, ship_dock, ship_dockwait, ship_nowork))
         game.send_command_queue(command_queue)
         # logger.debug("turn: {} send_command_queue len: {} took: {:.03f}"
         #             .format(turn, len(command_queue), time.time() - turn_end_presend))
-        logger.info("turn: {} end, took: {:.03f}"
-                    .format(turn, time.time() - turn_start_time))
+        logger.info("turn: {} end, sent {} commands, took: {:.03f}"
+                    .format(turn, len(command_queue), time.time() - turn_start_time))
         # TURN END
         # GAME END
 
