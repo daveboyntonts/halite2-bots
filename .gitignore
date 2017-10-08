@@ -2,3 +2,6 @@
 replay*.hlt
 *.pyc
 hlt/__pycache__
+SubmitBot*.zip
+hlt_client/
+*.diff
