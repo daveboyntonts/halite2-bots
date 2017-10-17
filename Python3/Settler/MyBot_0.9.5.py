@@ -11,7 +11,7 @@ import pprint
 from random import sample, randint
 from collections import defaultdict
 
-VERSION = "0.9.6"
+VERSION = "0.9.5"
 DEBUG = False
 
 
@@ -221,11 +221,10 @@ def halite2_main():
         # action_ships: give the above limit, these ships will act this turn
         #               sample/shuffle ships to avoid deadlocks
 
-        # e.g. action_planet_claim_percent: percentage of above (based on id hash) that will dock
+        # e.g. action_planet_percent: percentage of above (based on id hash) that will dock
         # percents have order:
         #   action_destroy_planet_percent 
-        #   action_planet_refill_percent 
-        #   action_planet_claim_percent 
+        #   action_planet_percent 
         #   action_collide_docked_percent
         #   action_target_docked_percent 
 
@@ -243,14 +242,13 @@ def halite2_main():
             action_planet_target_limit = 10
             action_target_docked_range = 1000
             navigate_ignore_ships_threshold = 100
-            action_destroy_planet_percent = 30
-            action_planet_refill_percent = 50
-            action_planet_claim_percent = 50
-            action_collide_docked_percent = 90
-            action_target_docked_percent = 100
+            action_destroy_planet_percent = 100
+            action_planet_percent = 0
+            action_collide_docked_percent = 0
+            action_target_docked_percent = 0
         elif turn > 200 and len(my_undocked_ships) > 100:
             ship_time_limit = 1.5
-            ship_speed = hlt.constants.MAX_SPEED * 0.8
+            ship_speed = hlt.constants.MAX_SPEED * 0.4
             ship_action_limit = 30
             ship_dock_ratio = 4
             ship_dock_enemy_watch_range = 16
@@ -258,18 +256,17 @@ def halite2_main():
             action_ships = my_undocked_ships[:min(ship_action_limit, len(my_undocked_ships))]
             #action_ship_long_range = int(max(1000, game_map.width, game_map.height))
             action_ship_long_range = 50
-            action_planet_long_range = int(max(1000, game_map.width * game_map.height))
+            action_planet_long_range = int(max(1000, game_map.width, game_map.height))
             action_planet_target_limit = 2
             action_target_docked_range = 1000
             navigate_ignore_ships_threshold = 100
             action_destroy_planet_percent = 25
-            action_planet_refill_percent = 40
-            action_planet_claim_percent = 40
+            action_planet_percent = 40
             action_collide_docked_percent = 60
             action_target_docked_percent = 70
         elif turn > 100 or len(my_undocked_ships) > 100:
             ship_time_limit = 1.7
-            ship_speed = hlt.constants.MAX_SPEED * 0.8
+            ship_speed = hlt.constants.MAX_SPEED * 0.5
             ship_action_limit = 50
             ship_dock_ratio = 3
             ship_dock_enemy_watch_range = 14
@@ -282,15 +279,14 @@ def halite2_main():
             action_target_docked_range = 150
             navigate_ignore_ships_threshold = 100
             action_destroy_planet_percent = 15
-            action_planet_refill_percent = 30
-            action_planet_claim_percent = 50
+            action_planet_percent = 30
             action_collide_docked_percent = 55
-            action_target_docked_percent = 90
+            action_target_docked_percent = 80
         elif turn > 50:
             ship_time_limit = 1.8
             ship_speed = hlt.constants.MAX_SPEED * 0.95
             ship_action_limit = 100
-            ship_dock_ratio = 2
+            ship_dock_ratio = 1
             ship_dock_enemy_watch_range = 14
             ship_shun_center_planets = False
             action_ships = my_undocked_ships[:min(ship_action_limit, len(my_undocked_ships))]
@@ -300,28 +296,9 @@ def halite2_main():
             action_target_docked_range = 100
             navigate_ignore_ships_threshold = 100
             action_destroy_planet_percent = 0
-            action_planet_refill_percent = 40
-            action_planet_claim_percent = 50
-            action_collide_docked_percent = 0
+            action_planet_percent = 50
+            action_collide_docked_percent = 65
             action_target_docked_percent = 90
-        elif turn > 25:
-            ship_time_limit = 1.9
-            ship_speed = hlt.constants.MAX_SPEED
-            ship_action_limit = 100
-            ship_dock_ratio = 1
-            ship_dock_enemy_watch_range = 30
-            ship_shun_center_planets = False
-            action_ships = my_undocked_ships
-            action_ship_long_range = 75
-            action_planet_long_range = 200
-            action_planet_target_limit = 0
-            action_target_docked_range = 100
-            navigate_ignore_ships_threshold = 100
-            action_destroy_planet_percent = 0
-            action_planet_refill_percent = 50
-            action_planet_claim_percent = 70
-            action_collide_docked_percent = 0
-            action_target_docked_percent = 95
         elif turn > 10:
             ship_time_limit = 1.9
             ship_speed = hlt.constants.MAX_SPEED
@@ -332,14 +309,13 @@ def halite2_main():
             action_ships = my_undocked_ships
             action_ship_long_range = 50
             action_planet_long_range = 200
-            action_planet_target_limit = 2
+            action_planet_target_limit = 0
             action_target_docked_range = 100
             navigate_ignore_ships_threshold = 100
             action_destroy_planet_percent = 0
-            action_planet_refill_percent = 85
-            action_planet_claim_percent = 95
+            action_planet_percent = 75
             action_collide_docked_percent = 0
-            action_target_docked_percent = 100
+            action_target_docked_percent = 95
         else:
             ship_time_limit = 1.9
             ship_speed = hlt.constants.MAX_SPEED
@@ -354,8 +330,7 @@ def halite2_main():
             action_target_docked_range = 100
             navigate_ignore_ships_threshold = 100
             action_destroy_planet_percent = 0
-            action_planet_refill_percent = 80
-            action_planet_claim_percent = 100
+            action_planet_percent = 90
             action_collide_docked_percent = 0
             action_target_docked_percent = 0
 
@@ -471,38 +446,15 @@ def halite2_main():
                         continue
                 # else fall through
 
-            if hash(ship.id) % 100 < action_planet_refill_percent:
-                # find ship's closest owned planet with empty docking slots
-                logger.debug("ship id {} hash {} is planet refill action (percent: {})"
-                             .format(ship.id, hash(ship.id) % 100, action_planet_refill_percent))
+            if hash(ship.id) % 100 < action_planet_percent:
+                # find ship's closest planet to navigate to
+                logger.debug("ship id {} hash {} is planet action (percent: {})"
+                             .format(ship.id, hash(ship.id) % 100, action_planet_percent))
                 planet = find_closest_owned_planet_with_docking(game_map, ship, owned_planets,
                                                                 action_planet_long_range,
                                                                 planet_targetting)
-                if planet:
-                    logger.info("turn: {} ship: {} x,y {},{} off to refill planet: {} x,y {},{}"
-                                .format(turn, ship.id, ship.x, ship.y,
-                                        planet.id, planet.x, planet.y))
-                    target_point = ship.closest_point_to(planet, planet_navigate_distance)
-                    navigate_command = ship.navigate(target_point, game_map,
-                                                     speed=ship_speed,
-                                                     ignore_ships=ignore_ships)
-                    ship_navigate += 1
-                    if navigate_command:
-                        command_queue.append(navigate_command)
-                    if action_planet_target_limit > 0:
-                        planet_targetting[planet.id] += 1
-                        if (not planet.is_owned() and
-                                planet_targetting[planet.id] > (planet.num_docking_spots)):
-                            logger.info("turn: {} ship: {} removing planet from unowned targetting {}"
-                                        .format(turn, ship.id, planet.id))
-                            unowned_planets.remove(planet)
-                    continue
-
-            if hash(ship.id) % 100 < action_planet_claim_percent:
-                # find ship's closest planet to navigate to
-                logger.debug("ship id {} hash {} is planet claim action (percent: {})"
-                             .format(ship.id, hash(ship.id) % 100, action_planet_claim_percent))
-                planet = find_closest_unowned_planet(game_map, ship, unowned_planets, 100)
+                if not planet:
+                    planet = find_closest_unowned_planet(game_map, ship, unowned_planets, 100)
                 if planet:
                     logger.info("turn: {} ship: {} x,y {},{} off to planet: {} x,y {},{}"
                                 .format(turn, ship.id, ship.x, ship.y,
@@ -520,10 +472,9 @@ def halite2_main():
                         planet_targetting[planet.id] += 1
                         if (not planet.is_owned() and
                                 planet_targetting[planet.id] > (planet.num_docking_spots)):
-                            logger.info("turn: {} ship: {} removing planet from unowned targetting {}"
-                                        .format(turn, ship.id, planet.id))
                             unowned_planets.remove(planet)
                     continue
+
                 # else this will fall through to aggressive anti-ship behavior
 
             # anti-ship action 
